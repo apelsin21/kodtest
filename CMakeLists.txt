@@ -16,3 +16,7 @@ add_executable(
 	${SOURCES}
 	${HEADERS}
 )
+
+target_link_libraries(${PROJECT_NAME}
+	curl
+)
