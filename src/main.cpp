@@ -2,6 +2,7 @@
 #include <fstream>
 #include <memory>
 #include <vector>
+#include <algorithm>
 
 #include <cstring>
 
@@ -48,7 +49,7 @@ class HTTPHandler {
 		bool get(const std::string& where, std::string& result) {
 			m_CurlHandle = curl_easy_init();
 
-			std::cout << "Downloading file " << where<< "\n";
+			std::cout << "Sending GET to " << where << "\n";
 
 			char errorBuffer[CURL_ERROR_SIZE];
 			DownloadedData downloaded;
@@ -136,13 +137,70 @@ class HTTPHandler {
 
 class DataPresenter {
 	protected:
+		std::map<int, std::string> m_RegionNames; //For convenience
+		std::vector<int> m_RegionCodes; //So that we don't hardocde the values for the regions, instead get them from the database
+		std::vector<int> m_Years; //So that come next election, our code isn't outdated
 	public:
 		DataPresenter() {
 		}
 		~DataPresenter() {
 		}
 
+		bool getNamesForRegionCodes(const std::string& toParse) {
+			if(toParse.empty()) {
+				std::cerr << "Tried to parse empty Json string.\n";
+				return false;
+			}
+
+			std::string src = toParse;
+
+			Json::Value root;
+			Json::Reader reader;
+			bool success = reader.parse(src, root, false);
+			
+			if(!success || !reader.good() || root.isNull()) {
+				std::cerr << "Failed to parse Json. Error:\n" << reader.getFormattedErrorMessages() << "\n";
+				return false;
+			}
+
+			Json::Value jsonVariables = root["variables"];
+			Json::Value regionInfo = jsonVariables[0];
+
+			Json::Value regionCodes = regionInfo["values"];
+			Json::Value regionNames = regionInfo["valueTexts"];
+
+			//Get and copy the years table for later reference
+			Json::Value timeTable = jsonVariables[2];
+			Json::Value years = timeTable["values"];
+
+			for(unsigned int i = 0; i < years.size(); i++) {
+				m_Years.push_back(std::atoi(years[i].asCString()));
+			}
+			
+			//It's already sorted, but we can't assume that it always will be
+			std::sort(m_Years.begin(), m_Years.end());
+
+			for(unsigned int i = 0; i < regionCodes.size(); i++) {
+				int key = std::atoi(regionCodes[i].asCString());
+				std::string value = regionNames[i].asString();
+
+				m_RegionCodes.push_back(key); //Make a copy of the regioncode for iterating purposes in a non-associative container.
+				m_RegionNames[key] = value;
+			}
+
+			return true;
+		}
+
 		std::string getNicelyFormattedData(const std::string& toParse) {
+			if(toParse.empty()) {
+				std::cerr << "Tried to parse empty Json string.\n";
+				return "";
+			}
+			if(m_RegionNames.empty() || m_RegionCodes.empty()) {
+				std::cerr << "Can't get nicely formatted data without the names for our region codes.\n";
+				return "";
+			}
+
 			std::string result = toParse;
 
 			//This would be very bad in a production setting
@@ -152,7 +210,7 @@ class DataPresenter {
 			//https://en.wikipedia.org/wiki/Byte_order_mark
 			//
 			//without removing these bytes, JsonCpp can't parse the file without additional effort
-			//this would be handled correctly if it was meant to be used, especially on non-x86 machines to handle endianess correctly
+			//this would be handled correctly if it was meant to be used in production, especially on non-x86 machines to handle endianess correctly
 			//
 			//We also just assume that the next two bytes after 0xEF are also part of the BOM,
 			//and that there's just one BOM in the text
@@ -167,12 +225,63 @@ class DataPresenter {
 			Json::Reader reader;
 			bool success = reader.parse(result, root, false);
 			
-			if(!success || !reader.good()) {
+			if(!success || !reader.good() || root.isNull()) {
 				std::cerr << "Failed to parse Json. Error:\n" << reader.getFormattedErrorMessages() << "\n";
 				return "";
 			}
 
-			return result;
+			//The key is a tuple consisting of the region code and the year, and the value is the election participation in percent.
+			std::map<std::tuple<int, int>, float> voterTurnout;
+
+			const Json::Value data = root["data"];
+			
+			for(unsigned int i = 0; i < data.size(); i++) {
+				Json::Value jsonKey = data[i].get("key", Json::Value());
+				//JsonCpp didn't want to convert it to an integer, so we have to do it ourselves
+				std::tuple<int, int> key = std::tuple<int, int>(std::atoi(jsonKey[0].asCString()), std::atoi(jsonKey[1].asCString()));
+
+				Json::Value jsonValues = data[i].get("values", Json::Value());
+				//this would optimally need a check for illegal characters
+				float value = std::atof(jsonValues[0].asCString()); //convert to float
+
+				voterTurnout[key] = value;
+			}
+
+			//Where the final results are kept. Key = year, value = regionCode
+			std::map<int, int> highScores;
+
+			std::vector<int> yearTurnout;
+			int lastRegionCode = 0;
+			float lastTurnout = 0.f;
+
+			for(unsigned int i = 0; i < m_Years.size(); i++) {
+				for(unsigned int j = 0; j < m_RegionCodes.size(); j++) {
+					float currentTurnout = voterTurnout[std::tuple<int, int>(m_RegionCodes[j], m_Years[i])];
+
+					if(currentTurnout > lastTurnout) {
+						lastTurnout = currentTurnout;
+						lastRegionCode = m_RegionCodes[j];
+					}
+				}
+
+				highScores[m_Years[i]] = lastRegionCode;
+			}
+
+			for(unsigned int i = 0; i < m_Years.size(); i++) {
+				int regionCode = highScores[m_Years[i]];
+				int year = m_Years[i];
+				float turnout = voterTurnout[std::tuple<int, int>(regionCode, year)];
+				std::cout << "The highest voter turnout of " << year << " had " << m_RegionNames[regionCode] << ", " << turnout << "%!\n";
+			}
+
+			//for(unsigned int i = 0; i < m_RegionCodes.size(); i++) {
+			//	for(unsigned int j = 0; j < m_Years.size(); j++) {
+			//		int regionCode = m_RegionCodes[i];
+			//		std::cout << "Year " << m_Years[j] << " the region " << m_RegionNames[regionCode] << " had a voter turnout of " << voterTurnout[std::tuple<int, int>(regionCode, m_Years[j])] << "%\n";
+			//	}
+			//}
+
+			return "";
 		}
 };
 
@@ -181,13 +290,23 @@ int main(void) {
 	HTTPHandler http;
 
 	std::string response;
+	if(http.get("http://api.scb.se/OV0104/v1/doris/sv/ssd/START/ME/ME0104/ME0104D/ME0104T4", response)) {
+
+		presenter.getNamesForRegionCodes(response);
+	} else {
+		return -1;
+	}
+
 
 	//A POST request containing a Json "question" to filter out the years we want in the table ME0104B8
-	http.post("http://api.scb.se/OV0104/v1/doris/sv/ssd/START/ME/ME0104/ME0104D/ME0104T4",
+	if(http.post("http://api.scb.se/OV0104/v1/doris/sv/ssd/START/ME/ME0104/ME0104D/ME0104T4",
 	"{\"query\": [{ \"code\": \"ContentsCode\", \"selection\": { \"filter\": \"item\", \"values\": [ \"ME0104B8\" ]}},{ \"code\": \"Tid\",\"selection\": { \"filter\": \"item\",\"values\": [ \"1973\",\"1976\",\"1979\",\"1982\",\"1985\",\"1988\",\"1991\",\"1994\",\"1998\",\"2002\",\"2006\",\"2010\",\"2014\"]}}],\"response\": {\"format\": \"json\"}}",
-	response);
+	response)) {
 
-	std::cout << presenter.getNicelyFormattedData(response) << "\n";
+		std::cout << presenter.getNicelyFormattedData(response) << "\n";
+	} else {
+		return -1;
+	}
 
 	return 0;
 }
