@@ -248,7 +248,6 @@ class DataPresenter {
 			}
 
 			//Where the final results are kept. Key = year, value = regionCodes
-			//The value is a vector so we can handle many draws
 			std::map<int, std::tuple<std::vector<int>, int>> highScores;
 
 			for(unsigned int i = 0; i < m_Years.size(); i++) {
