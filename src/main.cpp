@@ -250,22 +250,23 @@ class DataPresenter {
 			//Where the final results are kept. Key = year, value = regionCode
 			std::map<int, int> highScores;
 
-			std::vector<int> yearTurnout;
-			int lastRegionCode = 0;
-			float lastTurnout = 0.f;
-
 			for(unsigned int i = 0; i < m_Years.size(); i++) {
+				int bestRegionCode = 0;
+				float lastTurnout = 0.f;
+
 				for(unsigned int j = 0; j < m_RegionCodes.size(); j++) {
 					float currentTurnout = voterTurnout[std::tuple<int, int>(m_RegionCodes[j], m_Years[i])];
 
 					if(currentTurnout > lastTurnout) {
 						lastTurnout = currentTurnout;
-						lastRegionCode = m_RegionCodes[j];
+						bestRegionCode = m_RegionCodes[j];
 					}
 				}
 
-				highScores[m_Years[i]] = lastRegionCode;
+				highScores[m_Years[i]] = bestRegionCode;
 			}
+
+			result = "";
 
 			for(unsigned int i = 0; i < m_Years.size(); i++) {
 				int regionCode = highScores[m_Years[i]];
@@ -274,14 +275,7 @@ class DataPresenter {
 				std::cout << "The highest voter turnout of " << year << " had " << m_RegionNames[regionCode] << ", " << turnout << "%!\n";
 			}
 
-			//for(unsigned int i = 0; i < m_RegionCodes.size(); i++) {
-			//	for(unsigned int j = 0; j < m_Years.size(); j++) {
-			//		int regionCode = m_RegionCodes[i];
-			//		std::cout << "Year " << m_Years[j] << " the region " << m_RegionNames[regionCode] << " had a voter turnout of " << voterTurnout[std::tuple<int, int>(regionCode, m_Years[j])] << "%\n";
-			//	}
-			//}
-
-			return "";
+			return result;
 		}
 };
 
