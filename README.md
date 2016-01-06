@@ -6,8 +6,9 @@ from STL that isn't in the repo is libcurl, which i thought would be common enou
 Uses CMake to generate a makefile/Visual Studio Project/XCode project file.
 
 Building is something like this on Linux:
-cmake .
-make
+
+    cmake .
+    make
 
 It's probably similiar on OS X and *BSD, depending on the version.
 
