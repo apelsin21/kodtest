@@ -247,43 +247,62 @@ class DataPresenter {
 				voterTurnout[key] = value;
 			}
 
-			//Where the final results are kept. Key = year, value = regionCodes
-			std::map<int, std::tuple<std::vector<int>, int>> highScores;
+			//Where the final results are kept. Key = year, value = the highest voter turnout and a list of regionCodes that have the same turnout that year.
+			std::map<int, std::tuple<float, std::vector<int>>> highScores;
 
 			for(unsigned int i = 0; i < m_Years.size(); i++) {
-				std::vector<int> regionCodes;
-				std::vector<int> turnouts;
+				std::vector<int> bestRegionCodes;
+				float lastTurnout = 0.f;
 
 				for(unsigned int j = 0; j < m_RegionCodes.size(); j++) {
 					float currentTurnout = voterTurnout[std::tuple<int, int>(m_RegionCodes[j], m_Years[i])];
 
-					regionCodes.push_back(m_RegionCodes[j]);
-
-					if(turnouts.empty()) {
-						turnouts.push_back(currentTurnout);
-					} else {
-						if(currentTurnout >= turnouts[turnouts.size() - 1]) {
-							turnouts.push_back(currentTurnout);
-						}
+					if(currentTurnout > lastTurnout) {
+						lastTurnout = currentTurnout;
+						bestRegionCodes.clear();
+						bestRegionCodes.push_back(m_RegionCodes[j]);
+					} else if(currentTurnout == lastTurnout) {
+						bestRegionCodes.push_back(m_RegionCodes[j]);
 					}
 				}
 
-				for(unsigned int i = turnouts.size() - 1; i >= 0; i--) {
-					if(i != 0) {
-						if(turnouts[i] == turnouts[i - 1]) {
-							highScores[m_Years[i]].push_back(regionCodes[i]);
-						}
-					}
-				}
+				highScores[m_Years[i]] = std::tuple<float, std::vector<int>>(lastTurnout, bestRegionCodes);
 			}
 
 			result = "";
 
 			for(unsigned int i = 0; i < m_Years.size(); i++) {
-				std::vector<int> regionCodes = highScores[m_Years[i]];
-				
-				if(regionCodes.size() == 1) {
-					std::cout << m_RegionNames[regionCodes[0]] << " had the best turnaround of " << m_Years[i] << ", " << 
+				std::vector<int> draws = std::get<1>(highScores[m_Years[i]]); //the regioncodes that have a draw this year
+				float turnout = std::get<0>(highScores[m_Years[i]]); //the turnout this year
+
+				if(draws.size() > 1) { //There has been a draw or more.
+					//Iterate through the region codes that are at a draw
+					//and print to stdout, with some grammatical additions
+					for(unsigned int j = 0; j < draws.size(); j++) {
+						if(j == draws.size() - 1) { //if it is the last element
+							result += "and ";
+							result += m_RegionNames[draws[j]];
+						} else {
+							result += m_RegionNames[draws[j]];
+						   	result += ", ";
+						}
+					}
+
+					result += " had the highest turnout ";
+				    result += std::to_string(m_Years[i]);
+				    result += ", ";
+					result += std::to_string(turnout);
+					result += "%!\n";
+				} else if(draws.size() == 1) { // No draws occurred
+					result += m_RegionNames[draws[0]];
+				    result += " had the highest turnout ";
+				    result += std::to_string(m_Years[i]);
+					result += ", ";
+				   	result += std::to_string(turnout);
+					result += "%!\n";
+				} else { // No region had the highest turnout. Error.
+					std::cerr << "Got no region winning the year " << m_Years[i] << ".\n";
+					return "";
 				}
 			}
 
@@ -296,6 +315,8 @@ int main(void) {
 	HTTPHandler http;
 
 	std::string response;
+	//We need to get this table in order to map the region codes to their names
+	//or we'd have to do it by hand
 	if(http.get("http://api.scb.se/OV0104/v1/doris/sv/ssd/START/ME/ME0104/ME0104D/ME0104T4", response)) {
 
 		presenter.getNamesForRegionCodes(response);
