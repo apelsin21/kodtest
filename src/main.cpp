@@ -330,7 +330,7 @@ int main(void) {
 	"{\"query\": [{ \"code\": \"ContentsCode\", \"selection\": { \"filter\": \"item\", \"values\": [ \"ME0104B8\" ]}},{ \"code\": \"Tid\",\"selection\": { \"filter\": \"item\",\"values\": [ \"1973\",\"1976\",\"1979\",\"1982\",\"1985\",\"1988\",\"1991\",\"1994\",\"1998\",\"2002\",\"2006\",\"2010\",\"2014\"]}}],\"response\": {\"format\": \"json\"}}",
 	response)) {
 
-		std::cout << presenter.getNicelyFormattedData(response) << "\n";
+		std::cout << presenter.getNicelyFormattedData(response);
 	} else {
 		return -1;
 	}
