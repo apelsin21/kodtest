@@ -138,7 +138,7 @@ class HTTPHandler {
 class DataPresenter {
 	protected:
 		std::map<int, std::string> m_RegionNames; //For convenience
-		std::vector<int> m_RegionCodes; //So that we don't hardocde the values for the regions, instead get them from the database
+		std::vector<int> m_RegionCodes; //So that we don't hardcode the values for the regions, instead get them from the database
 		std::vector<int> m_Years; //So that come next election, our code isn't outdated
 	public:
 		DataPresenter() {
